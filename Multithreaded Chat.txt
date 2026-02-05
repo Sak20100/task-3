@@ -1,0 +1,162 @@
+import java.io.*;
+import java.net.*;
+import java.util.*;
+
+/**
+ * ChatApplication
+ * ----------------
+ * Single Java program that works as:
+ * 1. Chat Server
+ * 2. Chat Client
+ * Uses Java Sockets and Multithreading
+ */
+public class ChatApplication {
+
+    /* ================= SERVER PART ================= */
+
+    private static Set<ClientHandler> clients = new HashSet<>();
+
+    public static void startServer() {
+        int port = 5000;
+        System.out.println("Chat Server started on port " + port);
+
+        try (ServerSocket serverSocket = new ServerSocket(port)) {
+
+            while (true) {
+                Socket socket = serverSocket.accept();
+                System.out.println("New client connected");
+
+                ClientHandler handler = new ClientHandler(socket);
+                clients.add(handler);
+
+                new Thread(handler).start();
+            }
+
+        } catch (IOException e) {
+            System.out.println("Server error.");
+        }
+    }
+
+    // Broadcast message to all clients
+    public static void broadcast(String message, ClientHandler sender) {
+        for (ClientHandler client : clients) {
+            if (client != sender) {
+                client.sendMessage(message);
+            }
+        }
+    }
+
+    public static void removeClient(ClientHandler client) {
+        clients.remove(client);
+        System.out.println("Client disconnected");
+    }
+
+    /* ================= CLIENT HANDLER ================= */
+
+    static class ClientHandler implements Runnable {
+
+        private Socket socket;
+        private PrintWriter out;
+        private BufferedReader in;
+
+        public ClientHandler(Socket socket) {
+            this.socket = socket;
+        }
+
+        public void run() {
+            try {
+                in = new BufferedReader(
+                        new InputStreamReader(socket.getInputStream()));
+                out = new PrintWriter(
+                        socket.getOutputStream(), true);
+
+                out.println("Welcome to Multithreaded Chat!");
+
+                String message;
+                while ((message = in.readLine()) != null) {
+                    System.out.println("Message: " + message);
+                    ChatApplication.broadcast(message, this);
+                }
+
+            } catch (IOException e) {
+                System.out.println("Client error.");
+            } finally {
+                closeConnection();
+            }
+        }
+
+        public void sendMessage(String message) {
+            out.println(message);
+        }
+
+        private void closeConnection() {
+            try {
+                ChatApplication.removeClient(this);
+                socket.close();
+            } catch (IOException e) {
+                System.out.println("Error closing client.");
+            }
+        }
+    }
+
+    /* ================= CLIENT PART ================= */
+
+    public static void startClient() {
+        String server = "localhost";
+        int port = 5000;
+
+        try {
+            Socket socket = new Socket(server, port);
+            System.out.println("Connected to chat server");
+
+            BufferedReader in = new BufferedReader(
+                    new InputStreamReader(socket.getInputStream()));
+            PrintWriter out = new PrintWriter(
+                    socket.getOutputStream(), true);
+
+            // Thread to receive messages
+            new Thread(() -> {
+                try {
+                    String msg;
+                    while ((msg = in.readLine()) != null) {
+                        System.out.println(msg);
+                    }
+                } catch (IOException e) {
+                    System.out.println("Disconnected from server.");
+                }
+            }).start();
+
+            // Send user messages
+            BufferedReader userInput = new BufferedReader(
+                    new InputStreamReader(System.in));
+
+            String message;
+            while ((message = userInput.readLine()) != null) {
+                out.println(message);
+            }
+
+        } catch (IOException e) {
+            System.out.println("Unable to connect to server.");
+        }
+    }
+
+    /* ================= MAIN METHOD ================= */
+
+    public static void main(String[] args) {
+
+        if (args.length == 0) {
+            System.out.println("Usage:");
+            System.out.println("To start server: java ChatApplication server");
+            System.out.println("To start client: java ChatApplication client");
+            return;
+        }
+
+        if (args[0].equalsIgnoreCase("server")) {
+            startServer();
+        } else if (args[0].equalsIgnoreCase("client")) {
+            startClient();
+        } else {
+            System.out.println("Invalid argument.");
+        }
+    }
+}
